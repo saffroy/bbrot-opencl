@@ -29,7 +29,9 @@ MAX_RENDER_BUFS = MAX_RENDER_BUF_MEM // (4 * STEPS * STEPS)
 
 PALETTE_LENGTH = 256
 
-def gen_header():
+CL_HEADER_FILE_NAME = 'bbrot-generated.h'
+
+def gen_header(fname):
     s = f'''
 #pragma once
 
@@ -43,7 +45,7 @@ def gen_header():
 
 #define MAX_LOOPS {MAX_LOOPS}
 '''
-    with open('bbrot-generated.h', 'w') as f:
+    with open(fname, 'w') as f:
         f.write(s)
 
 def cl_init():
@@ -56,11 +58,12 @@ def cl_init():
     cq = cl.CommandQueue(ctx)
 
     # load kernels
-    gen_header()
+    gen_header(CL_HEADER_FILE_NAME)
     os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
     with open('bbrot.cl') as f:
         prog = cl.Program(ctx, f.read()).build('-I.')
 
+    os.unlink(CL_HEADER_FILE_NAME)
     return (ctx, cq, prog)
 
 def mandel_iters(ctx, cq, prog, max_iters, x0, y0):

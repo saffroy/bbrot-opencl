@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import sys
 import time
 
 import numpy as np
@@ -166,6 +167,13 @@ def save_seeds(seeds, fname):
     with open(fname, 'w') as f:
         f.write(json.dumps(obj))
 
+def load_seeds(fname):
+    with open(fname) as f:
+        obj = json.load(f)
+    l = [ (o['pointX'], o['pointY'], o['orbitLength'])
+          for o in obj['pointList'] ]
+    return l
+
 def render_seeds(ctx, cq, prog, seeds):
     # generate N buffers
     # while work to do:
@@ -240,7 +248,7 @@ def counts_to_image(ctx, cq, prog, counts, palette):
 
     return image
 
-def main():
+def compute():
     # compute input arrays of point coords
     # NB: xi and yi are arrays
     x0 = np.fromfunction(lambda yi, xi: XMIN + xi * DX,
@@ -284,14 +292,43 @@ def main():
     save_seeds(seeds, seed_name)
     print(f'saved seeds to "{seed_name}"')
 
+def render(seeds):
+    ctx, cq, prog = cl_init()
+
     # compute per-pixel counts of orbits
     counts = render_seeds(ctx, cq, prog, seeds)
 
+    palette = np.array([[0, 0, n] for n in range(PALETTE_LENGTH)],
+                       dtype=np.uint8)
+
     image2 = counts_to_image(ctx, cq, prog, counts, palette)
     img2 = PIL.Image.fromarray(image2, 'RGB')
-    img2_name = f'bbrot-{suffix}-{int(time.time())}.png'
+    img2_name = f'bbrot-{int(time.time())}.png'
     img2.save(img2_name)
     print(f'saved image "{img2_name}"')
+
+def main():
+    if len(sys.argv) <= 1:
+        print('error: missing first argument: "compute" or "render"')
+        sys.exit(1)
+    cmd = sys.argv[1]
+
+    if cmd == "compute":
+        compute()
+
+    elif cmd == "render":
+        seeds = []
+        for fname in sys.argv[2:]:
+            seeds.extend(load_seeds(fname))
+        if not seeds:
+            print('error: no input')
+            sys.exit(1)
+        print('seed count:', len(seeds))
+        render(seeds)
+
+    else:
+        print(f'error: invalid command: "{cmd}"')
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

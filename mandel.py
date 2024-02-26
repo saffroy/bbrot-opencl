@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import time
 
 import numpy as np
 import pyopencl as cl
@@ -274,7 +275,7 @@ def main():
         to_unit(MIN_ITERS_SAMPLES),
         to_unit(MAX_ITERS_SAMPLES),
     )
-    save_seeds(seeds, f'seeds-{suffix}.json')
+    save_seeds(seeds, f'seeds-{suffix}-{int(time.time())}.json')
 
     # compute per-pixel counts of orbits
     counts = render_seeds(ctx, cq, prog, seeds)

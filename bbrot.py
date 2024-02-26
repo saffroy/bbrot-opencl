@@ -279,14 +279,18 @@ def main():
         to_unit(MIN_ITERS_SAMPLES),
         to_unit(MAX_ITERS_SAMPLES),
     )
-    save_seeds(seeds, f'seeds-{suffix}-{int(time.time())}.json')
+    seed_name = f'seeds-{suffix}-{int(time.time())}.json'
+    save_seeds(seeds, seed_name)
+    print(f'saved seeds to "{seed_name}"')
 
     # compute per-pixel counts of orbits
     counts = render_seeds(ctx, cq, prog, seeds)
 
     image2 = counts_to_image(ctx, cq, prog, counts, palette)
     img2 = PIL.Image.fromarray(image2, 'RGB')
-    img2.save(f'bbrot-{suffix}.png')
+    img2_name = f'bbrot-{suffix}-{int(time.time())}.png'
+    img2.save(img2_name)
+    print(f'saved image "{img2_name}"')
 
 if __name__ == '__main__':
     main()

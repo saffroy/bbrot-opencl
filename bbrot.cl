@@ -106,24 +106,6 @@ __kernel void mandel_trace(__global int *seed_list_d,
         done_d[seed] = (x2 + y2 >= 4.0);
 }
 
-__kernel void counts_to_image(int max_count,
-                              int palette_len,
-                              __global char *palette_d,
-                              __global int *counts_d,
-                              __global char *image_d)
-{
-        int rank = get_global_id(0);
-
-        float ratio = (float)counts_d[rank] / (float)max_count;
-        int idx = min(palette_len, (int)(sqrt(ratio) * palette_len));
-
-        __global char *pal = palette_d + 3*idx;
-        __global char *pix = image_d + 3*rank;
-        pix[0] = pal[0];
-        pix[1] = pal[1];
-        pix[2] = pal[2];
-}
-
 static int in_mandel(int max_iters,
                      int i,
                      int j,

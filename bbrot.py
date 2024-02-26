@@ -207,25 +207,6 @@ def render_seeds(ctx, cq, prog, seeds):
     counts = np.sum(buff, axis=0, dtype=np.int32)
     return counts
 
-def counts_to_image(ctx, cq, prog, counts, palette):
-    h, w = counts.shape
-    image = np.zeros((h, w, 3), dtype=np.uint8)
-    (palette_len, _channels) = palette.shape
-
-    mf = cl.mem_flags
-    counts_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=counts)
-    palette_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=palette)
-    image_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=image)
-
-    prog.counts_to_image(cq, (h*w,), None,
-                         np.int32(np.max(counts)), np.int32(palette_len),
-                         palette_d, counts_d, image_d)
-
-    cl.enqueue_copy(cq, image, image_d)
-    cq.finish()
-
-    return image
-
 def compute():
     # compute input arrays of point coords
     # NB: xi and yi are arrays
@@ -269,7 +250,8 @@ def render(seeds):
     palette = np.array([[0, 0, n] for n in range(PALETTE_LENGTH)],
                        dtype=np.uint8)
 
-    image = counts_to_image(ctx, cq, prog, counts, palette)
+    scaled = np.uint16(np.sqrt(counts / np.max(counts)) * (PALETTE_LENGTH - 1))
+    image = palette[scaled]
 
     img = PIL.Image.fromarray(image, 'RGB')
     img_name = f'bbrot-{int(time.time())}.png'

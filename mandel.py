@@ -45,12 +45,11 @@ def gen_header():
 
 def cl_init():
     # setup openCL structs
-    if os.environ.get('PYOPENCL_CTX'):
-        ctx = cl.create_some_context()
-    else:
-        p0 = cl.get_platforms()[0]
-        d0 = p0.get_devices()[0]
-        ctx = cl.Context([d0])
+    ctx = cl.create_some_context(interactive=False)
+    print('OpenCL context using devices:')
+    for dev in ctx.devices:
+        dev_type = cl.device_type.to_string(dev.type)
+        print(f' "{dev.name}" on "{dev.platform.name}" type "{dev_type}"')
     cq = cl.CommandQueue(ctx)
 
     # load kernels

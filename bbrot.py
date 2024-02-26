@@ -41,7 +41,7 @@ def gen_header():
 
 #define MAX_LOOPS {MAX_LOOPS}
 '''
-    with open('mandel-generated.h', 'w') as f:
+    with open('bbrot-generated.h', 'w') as f:
         f.write(s)
 
 def cl_init():
@@ -56,7 +56,7 @@ def cl_init():
     # load kernels
     gen_header()
     os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-    with open('mandel.cl') as f:
+    with open('bbrot.cl') as f:
         prog = cl.Program(ctx, f.read()).build('-I.')
 
     return (ctx, cq, prog)

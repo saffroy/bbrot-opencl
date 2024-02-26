@@ -1,6 +1,6 @@
 // -*- c -*-
 
-#include "mandel-generated.h"
+#include "bbrot-generated.h"
 
 #ifndef FLOAT
 #define FLOAT double

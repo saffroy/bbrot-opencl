@@ -24,7 +24,8 @@ MAX_ITERS_CELLS = 256
 SAMPLES = 10**7
 MIN_ITERS_SAMPLES = 1*10**6
 MAX_ITERS_SAMPLES = 5*10**6
-MAX_RENDER_BUFS = 32
+MAX_RENDER_BUF_MEM = 2*1024**3
+MAX_RENDER_BUFS = MAX_RENDER_BUF_MEM // (4 * STEPS * STEPS)
 
 PALETTE_LENGTH = 256
 
@@ -159,56 +160,52 @@ def render_seeds(ctx, cq, prog, seeds):
     # generate N buffers
     # while work to do:
     # - pick buffer, pick unfinished seed
-    # - enqueue 1 work item: render seed orbit to buffer up to N loops
+    # - enqueue k<=N work items: render seed orbit to buffer up to L loops
     # - when all buffers or seeds "busy", wait
     # - break when all seeds done
     # combine buffers: add each to the first one
 
+    nbufs = min(MAX_RENDER_BUFS, len(seeds))
+
+    seed_list = np.zeros((nbufs,), dtype=np.int32)
     x0 = np.array([t[0] for t in seeds], dtype=np.float64)
     y0 = np.array([t[1] for t in seeds], dtype=np.float64)
     x = np.array(x0)
     y = np.array(y0)
+    buff = np.zeros((nbufs, STEPS, STEPS), dtype=np.int32)
     done = np.zeros((len(seeds),), dtype=np.int32)
 
     mf = cl.mem_flags
+    seed_list_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=seed_list)
     x0_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=x0)
     y0_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=y0)
     x_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=x)
     y_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=y)
+    buff_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=buff)
     done_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=done)
 
-    nbufs = min(MAX_RENDER_BUFS, len(seeds))
-    buffs = []
-    buffs_d = []
-    for _ in range(nbufs):
-        buff = np.zeros((STEPS, STEPS), dtype=np.int32)
-        buff_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=buff)
-        buffs.append(buff)
-        buffs_d.append(buff_d)
-
-    render_kernel = prog.mandel_trace
+    mandel_trace = prog.mandel_trace
     while True:
         unfinished = [i for i in range(len(seeds))
                       if done[i] == 0]
         if not(unfinished):
             break
-        for seed, buff_d in zip(unfinished, buffs_d):
-            render_kernel(cq, (1,), None,
-                          np.int32(seed),
-                          x0_d, y0_d, x_d, y_d, buff_d, done_d)
+
+        n = min(nbufs, len(unfinished))
+        for buff_id in range(n):
+            seed_list[buff_id] = unfinished[buff_id]
+        cl.enqueue_copy(cq, seed_list_d, seed_list)
+
+        mandel_trace(cq, (n,), None,
+                     seed_list_d, x0_d, y0_d, x_d, y_d, buff_d, done_d)
         cq.finish()
 
         cl.enqueue_copy(cq, done, done_d)
 
-    for buff, buff_d in zip(buffs, buffs_d):
-        cl.enqueue_copy(cq, buff, buff_d, is_blocking=False)
-    cq.finish()
+    cl.enqueue_copy(cq, buff, buff_d)
 
-    dest = buffs[0]
-    for buff in buffs[1:]:
-        dest += buff
-
-    return dest
+    counts = np.sum(buff, axis=0, dtype=np.int32)
+    return counts
 
 def counts_to_image(ctx, cq, prog, counts, palette):
     h, w = counts.shape

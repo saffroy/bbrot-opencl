@@ -50,7 +50,7 @@ __kernel void mandel_iters(int max_iters,
         done_d[rank] = (x2 + y2 >= 4.0) || iters >= max_iters;
 }
 
-static void inc_pix(FLOAT x, FLOAT y, __global int *buff_d)
+static void inc_pix(FLOAT x, FLOAT y, __global int *buff)
 {
         int xi = (x - XMIN) / XRANGE * STEPS;
         int yi = (y - YMIN) / YRANGE * STEPS;
@@ -58,11 +58,11 @@ static void inc_pix(FLOAT x, FLOAT y, __global int *buff_d)
         if ((xi >= 0) && (xi < STEPS)
             && (yi >= 0) && (yi < STEPS)) {
                 int off = xi + yi*STEPS;
-                buff_d[off]++;
+                buff[off]++;
         }
 }
 
-__kernel void mandel_trace(int seed,
+__kernel void mandel_trace(__global int *seed_list_d,
                            __global FLOAT *x0_d,
                            __global FLOAT *y0_d,
                            __global FLOAT *x_d,
@@ -70,8 +70,13 @@ __kernel void mandel_trace(int seed,
                            __global int *buff_d,
                            __global int *done_d)
 {
+        int rank = get_global_id(0);
+        int seed = seed_list_d[rank];
+
         if (done_d[seed])
                 return;
+
+        __global int *buff = buff_d + rank * (STEPS * STEPS);
 
         FLOAT x0 = x0_d[seed];
         FLOAT y0 = y0_d[seed];
@@ -90,7 +95,7 @@ __kernel void mandel_trace(int seed,
                 x = x2 - y2 + x0;
 
                 n++;
-                inc_pix(x, y, buff_d);
+                inc_pix(x, y, buff);
 
                 x2 = x * x;
                 y2 = y * y;

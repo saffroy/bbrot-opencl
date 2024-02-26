@@ -269,11 +269,12 @@ def render(seeds):
     palette = np.array([[0, 0, n] for n in range(PALETTE_LENGTH)],
                        dtype=np.uint8)
 
-    image2 = counts_to_image(ctx, cq, prog, counts, palette)
-    img2 = PIL.Image.fromarray(image2, 'RGB')
-    img2_name = f'bbrot-{int(time.time())}.png'
-    img2.save(img2_name)
-    print(f'saved image "{img2_name}"')
+    image = counts_to_image(ctx, cq, prog, counts, palette)
+
+    img = PIL.Image.fromarray(image, 'RGB')
+    img_name = f'bbrot-{int(time.time())}.png'
+    img.save(img_name)
+    print(f'saved image "{img_name}"')
 
 def main():
     if len(sys.argv) <= 1:

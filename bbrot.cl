@@ -137,3 +137,41 @@ __kernel void counts_to_image(int max_count,
         pix[1] = pal[1];
         pix[2] = pal[2];
 }
+
+static int in_mandel(int max_iters,
+                     int i,
+                     int j,
+                     __global int *iters_d)
+{
+        int off = i + j*STEPS;
+        return iters_d[off] == max_iters ? 1 : 0;
+}
+
+__kernel void gen_cell_list(int max_iters,
+                            __global int *iters_d,
+                            __global int *cells_d,
+                            __global int *cell_count_d)
+{
+        __global int *plist = cells_d;
+        int num_cells = 0;
+
+        for (int j = 0; j < STEPS-1; j++) {
+                for (int i = 0; i < STEPS-1; i++) {
+                        int s = 0;
+                        s += in_mandel(max_iters, i+0, j+0, iters_d);
+                        s += in_mandel(max_iters, i+1, j+0, iters_d);
+                        s += in_mandel(max_iters, i+0, j+1, iters_d);
+                        s += in_mandel(max_iters, i+1, j+1, iters_d);
+
+                        // Eligible cell has some corners inside M-set
+                        // and some outside.
+                        if (s > 0 && s < 4) {
+                                (*plist++) = i;
+                                (*plist++) = j;
+                                num_cells++;
+                        }
+                }
+        }
+
+        *cell_count_d = num_cells;
+}

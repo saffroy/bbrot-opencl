@@ -111,21 +111,22 @@ def iters_to_image(ctx, cq, prog, iters, max_iters, palette):
 
     return image
 
-def iter_cells(iters, max_iters):
-    deltas = [(0, 0), (0, 1), (1, 0), (1, 1)]
+def frontier_cells(ctx, cq, prog, iters, max_iters):
+    cells = np.zeros((math.prod(iters.shape), 2), dtype=np.int32)
+    cell_count = np.array([0], dtype=np.int32)
 
-    def on_frontier(i, j):
-        in_m = [
-            iters[i+di, j+dj] == max_iters
-            for (di, dj) in deltas
-        ]
-        return any(in_m) and not all(in_m)
+    mf = cl.mem_flags
+    iters_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=iters)
+    cells_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=cells)
+    cell_count_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=cell_count)
 
-    l = list((i, j)
-             for i in range(STEPS-1)
-             for j in range(STEPS-1)
-             if on_frontier(i, j))
-    return l
+    prog.gen_cell_list(cq, (1,), None,
+                       np.int32(max_iters), iters_d, cells_d, cell_count_d)
+    cq.finish()
+    cl.enqueue_copy(cq, cells, cells_d)
+    cl.enqueue_copy(cq, cell_count, cell_count_d)
+
+    return [ (j, i) for (i, j) in cells[:cell_count[0]] ]
 
 def sample_cells(ctx, cq, prog, x0, y0, cells):
     per_cell = 1 + SAMPLES // len(cells)
@@ -264,7 +265,7 @@ def main():
 
     # generate list of cells on border of m-set
     print('generating cell list...')
-    cells = iter_cells(iters, MAX_ITERS_CELLS)
+    cells = frontier_cells(ctx, cq, prog, iters, MAX_ITERS_CELLS)
     print('cell count:', len(cells))
 
     # generate samples in cells, retain those with slow escaping orbits

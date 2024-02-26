@@ -50,25 +50,6 @@ __kernel void mandel_iters(int max_iters,
         done_d[rank] = (x2 + y2 >= 4.0) || iters >= max_iters;
 }
 
-__kernel void iters_to_image(int max_iters,
-                             int palette_len,
-                             __global char *palette_d,
-                             __global int *iters_d,
-                             __global char *image_d)
-{
-        int rank = get_global_id(0);
-
-        int iters = iters_d[rank];
-        int idx = (iters == max_iters)
-                ? 0 : iters % palette_len;
-
-        __global char *pal = palette_d + 3*idx;
-        __global char *pix = image_d + 3*rank;
-        pix[0] = pal[0];
-        pix[1] = pal[1];
-        pix[2] = pal[2];
-}
-
 static void inc_pix(FLOAT x, FLOAT y, __global int *buff_d)
 {
         int xi = (x - XMIN) / XRANGE * STEPS;

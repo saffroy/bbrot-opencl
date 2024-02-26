@@ -93,25 +93,6 @@ def mandel_iters(ctx, cq, prog, max_iters, x0, y0):
 
     return iters
 
-def iters_to_image(ctx, cq, prog, iters, max_iters, palette):
-    h, w = iters.shape
-    image = np.zeros((h, w, 3), dtype=np.uint8)
-    (palette_len, _channels) = palette.shape
-
-    mf = cl.mem_flags
-    iters_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=iters)
-    palette_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=palette)
-    image_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=image)
-
-    prog.iters_to_image(cq, (h*w,), None,
-                        np.int32(max_iters), np.int32(palette_len),
-                        palette_d, iters_d, image_d)
-
-    cl.enqueue_copy(cq, image, image_d)
-    cq.finish()
-
-    return image
-
 def frontier_cells(ctx, cq, prog, iters, max_iters):
     cells = np.zeros((math.prod(iters.shape), 2), dtype=np.int32)
     cell_count = np.array([0], dtype=np.int32)
@@ -260,16 +241,6 @@ def compute():
 
     # compute iterations
     iters = mandel_iters(ctx, cq, prog, MAX_ITERS_CELLS, x0, y0)
-
-    # compute image
-    palette = np.array([[n, 0, n] for n in range(PALETTE_LENGTH)],
-                       dtype=np.uint8)
-    image = iters_to_image(ctx, cq, prog,
-                           iters, MAX_ITERS_CELLS, palette)
-
-    # write image
-    img = PIL.Image.fromarray(image, 'RGB')
-    img.save('mandel.png')
 
     # generate list of cells on border of m-set
     print('generating cell list...')

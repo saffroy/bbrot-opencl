@@ -270,6 +270,10 @@ def main():
     # generate samples in cells, retain those with slow escaping orbits
     seeds = sample_cells(ctx, cq, prog, x0, y0, cells)
     print('seed count:', len(seeds))
+
+    if not(seeds):
+        return
+
     suffix = '{}-{}_{}'.format(
         to_unit(SAMPLES),
         to_unit(MIN_ITERS_SAMPLES),

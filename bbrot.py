@@ -97,22 +97,22 @@ def mandel_iters(ctx, cq, prog, max_iters, x0, y0):
 
     return iters
 
-def frontier_cells(ctx, cq, prog, iters, max_iters):
-    cells = np.zeros((math.prod(iters.shape), 2), dtype=np.int32)
-    cell_count = np.array([0], dtype=np.int32)
+def frontier_cells(iters, max_iters):
+    # Return coordinates for cells that have some corners inside the
+    # M-set and some corners outside.
+    # This uses numpy arrays operations for speed, as the more
+    # readable code in regular Python is way slower.
 
-    mf = cl.mem_flags
-    iters_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=iters)
-    cells_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=cells)
-    cell_count_d = cl.Buffer(ctx, mf.WRITE_ONLY | mf.COPY_HOST_PTR, hostbuf=cell_count)
+    iters_maxed = np.int8(iters == max_iters)
+    cell_corners_maxed = \
+        iters_maxed[ :-1,  :-1] + \
+        iters_maxed[1:,    :-1] + \
+        iters_maxed[ :-1, 1:  ] + \
+        iters_maxed[1:,   1:  ]
+    cell_on_border = (cell_corners_maxed > 0) * (cell_corners_maxed < 4)
+    selected = list(zip(*np.nonzero(cell_on_border)))
 
-    prog.gen_cell_list(cq, (1,), None,
-                       np.int32(max_iters), iters_d, cells_d, cell_count_d)
-    cq.finish()
-    cl.enqueue_copy(cq, cells, cells_d)
-    cl.enqueue_copy(cq, cell_count, cell_count_d)
-
-    return [ (j, i) for (i, j) in cells[:cell_count[0]] ]
+    return selected
 
 def sample_cells(ctx, cq, prog, x0, y0, cells):
     per_cell = 1 + SAMPLES // len(cells)
@@ -225,7 +225,7 @@ def compute():
 
     # generate list of cells on border of m-set
     print('generating cell list...')
-    cells = frontier_cells(ctx, cq, prog, iters, MAX_ITERS_CELLS)
+    cells = frontier_cells(iters, MAX_ITERS_CELLS)
     print('cell count:', len(cells))
 
     # generate samples in cells, retain those with slow escaping orbits

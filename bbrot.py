@@ -83,7 +83,7 @@ def mandel_iters(ctx, cq, prog, max_iters, x0, y0):
 
     # compute iters
     iters_kernel = prog.mandel_iters
-    nloops = max(1, max_iters // MAX_LOOPS)
+    nloops = math.ceil(max_iters / MAX_LOOPS)
     for n in range(nloops):
         print(f'mandel iters: {n+1} / {nloops}')
         iters_kernel(cq, (math.prod(x0.shape),), None,

@@ -27,8 +27,6 @@ MAX_ITERS_SAMPLES = 5*10**6
 MAX_RENDER_BUF_MEM = 2*1024**3
 MAX_RENDER_BUFS = MAX_RENDER_BUF_MEM // (4 * STEPS * STEPS)
 
-PALETTE_LENGTH = 256
-
 CL_HEADER_FILE_NAME = 'bbrot-generated.h'
 
 def gen_header(fname):
@@ -244,16 +242,25 @@ def compute():
     save_seeds(seeds, seed_name)
     print(f'saved seeds to "{seed_name}"')
 
+def flame_palette():
+    def f(x):
+        xr = min(120, x)
+        xg = min(120, x - xr)
+        xb = min(15, x - xr - xg)
+        r = xr * 2 + xr // 10
+        g = xg * 2 + xg // 10
+        b = xb * 17
+        return [r, g, b]
+    return np.array(list(map(f, range(256))), dtype=np.uint8)
+
 def render(seeds):
     ctx, cq, prog = cl_init()
 
     # compute per-pixel counts of orbits
     counts = render_seeds(ctx, cq, prog, seeds)
 
-    palette = np.array([[0, 0, n] for n in range(PALETTE_LENGTH)],
-                       dtype=np.uint8)
-
-    scaled = np.uint16(np.sqrt(counts / np.max(counts)) * (PALETTE_LENGTH - 1))
+    palette = flame_palette()
+    scaled = np.uint16(np.sqrt(counts / np.max(counts)) * (len(palette) - 1))
     image = palette[scaled]
 
     img = PIL.Image.fromarray(image, 'RGB')

@@ -245,12 +245,9 @@ def compute():
 
 def flame_palette():
     def f(x):
-        xr = min(120, x)
-        xg = min(120, x - xr)
-        xb = min(15, x - xr - xg)
-        r = xr * 2 + xr // 10
-        g = xg * 2 + xg // 10
-        b = xb * 17
+        r = min(255, 3 * x)
+        g = min(255, max(0, 3 * x - r))
+        b = min(255, max(0, 3 * x - r - g))
         return [r, g, b]
     return np.array(list(map(f, range(256))), dtype=np.uint8)
 

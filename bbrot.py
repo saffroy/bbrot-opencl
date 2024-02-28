@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import math
 import os
@@ -253,7 +254,7 @@ def flame_palette():
         return [r, g, b]
     return np.array(list(map(f, range(256))), dtype=np.uint8)
 
-def render(seeds):
+def render(seeds, img_name):
     ctx, cq, prog = cl_init()
 
     # compute per-pixel counts of orbits
@@ -264,28 +265,52 @@ def render(seeds):
     image = palette[scaled]
 
     img = PIL.Image.fromarray(image, 'RGB')
-    img_name = f'bbrot-{int(time.time())}.png'
     img.save(img_name)
     print(f'saved image "{img_name}"')
 
-def main():
-    if len(sys.argv) <= 1:
-        print('error: missing first argument: "compute" or "render"')
-        sys.exit(1)
-    cmd = sys.argv[1]
+def do_render(args):
+    if args.output is None:
+        if len(args.seeds) == 1:
+            [fname] = args.seeds
+            prefix = 'seeds-'
+            suffix = '.json'
+            if fname.startswith(prefix) and fname.endswith(suffix):
+                middle = fname[len(prefix):-len(suffix)]
+                args.output = f'bbrot-{middle}.png'
+        if args.output is None:
+            args.output = f'bbrot-{int(time.time())}.png'
 
-    if cmd == "compute":
+    seeds = []
+    for fname in args.seeds:
+        seeds.extend(load_seeds(fname))
+    if not seeds:
+        print('error: no input')
+        sys.exit(1)
+    print('seed count:', len(seeds))
+    render(seeds, args.output)
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='subcommand')
+    cmd_compute = subparsers.add_parser('compute')
+    cmd_render = subparsers.add_parser('render')
+    cmd_render.add_argument('--output', '-o',
+                            help='name of image output file')
+    cmd_render.add_argument('seeds',
+                            help='name of seed input file(s)',
+                            nargs='+')
+
+    args = parser.parse_args(sys.argv[1:])
+
+    if args.subcommand is None:
+        print('error: a subcommand is required')
+        sys.exit(1)
+
+    if args.subcommand == 'compute':
         compute()
 
-    elif cmd == "render":
-        seeds = []
-        for fname in sys.argv[2:]:
-            seeds.extend(load_seeds(fname))
-        if not seeds:
-            print('error: no input')
-            sys.exit(1)
-        print('seed count:', len(seeds))
-        render(seeds)
+    elif args.subcommand == 'render':
+        do_render(args)
 
     else:
         print(f'error: invalid command: "{cmd}"')

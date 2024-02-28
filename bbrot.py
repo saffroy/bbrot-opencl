@@ -265,6 +265,7 @@ def render(seeds, img_name):
     image = palette[scaled]
 
     img = PIL.Image.fromarray(image, 'RGB')
+    img = img.transpose(PIL.Image.Transpose.ROTATE_270)
     img.save(img_name)
     print(f'saved image "{img_name}"')
 

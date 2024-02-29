@@ -62,12 +62,14 @@ static void inc_pix(FLOAT x, FLOAT y, __global int *buff)
         }
 }
 
-__kernel void mandel_trace(__global int *seed_list_d,
+__kernel void mandel_trace(int max_iters,
+                           __global int *seed_list_d,
                            __global FLOAT *x0_d,
                            __global FLOAT *y0_d,
                            __global FLOAT *x_d,
                            __global FLOAT *y_d,
                            __global int *buff_d,
+                           __global int *iters_d,
                            __global int *done_d)
 {
         int rank = get_global_id(0);
@@ -82,6 +84,7 @@ __kernel void mandel_trace(__global int *seed_list_d,
         FLOAT y0 = y0_d[seed];
         FLOAT x = x_d[seed];
         FLOAT y = y_d[seed];
+        int iters = iters_d[seed];
 
         FLOAT x2 = x * x;
         FLOAT y2 = y * y;
@@ -89,12 +92,15 @@ __kernel void mandel_trace(__global int *seed_list_d,
         int n = 0;
 
         while ((x2 + y2 < 4.0)
-               && (n < MAX_LOOPS))
+               && (n < MAX_LOOPS)
+               && ((max_iters < 0)
+                   || (iters < max_iters)))
         {
                 y = 2 * x * y + y0;
                 x = x2 - y2 + x0;
 
                 n++;
+                iters++;
                 inc_pix(x, y, buff);
 
                 x2 = x * x;
@@ -103,5 +109,7 @@ __kernel void mandel_trace(__global int *seed_list_d,
 
         x_d[seed] = x;
         y_d[seed] = y;
-        done_d[seed] = (x2 + y2 >= 4.0);
+        iters_d[seed] = iters;
+        done_d[seed] = (x2 + y2 >= 4.0)
+                || (max_iters >= 0 && iters >= max_iters);
 }

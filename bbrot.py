@@ -28,6 +28,8 @@ MAX_ITERS_SAMPLES = 5*10**6
 MAX_RENDER_BUF_MEM = 2*1024**3
 MAX_RENDER_BUFS = MAX_RENDER_BUF_MEM // (4 * STEPS * STEPS)
 
+ANIMATE_FRAMES = 25*5
+
 CL_HEADER_FILE_NAME = 'bbrot-generated.h'
 
 def gen_header(fname):
@@ -158,7 +160,7 @@ def load_seeds(fname):
           for o in obj['pointList'] ]
     return l
 
-def render_seeds(ctx, cq, prog, seeds):
+def render_seeds_gen(ctx, cq, prog, seeds, iter_checkpoints):
     # generate N buffers
     # while work to do:
     # - pick buffer, pick unfinished seed
@@ -175,7 +177,8 @@ def render_seeds(ctx, cq, prog, seeds):
     x = np.array(x0)
     y = np.array(y0)
     buff = np.zeros((nbufs, STEPS, STEPS), dtype=np.int32)
-    done = np.zeros((len(seeds),), dtype=np.int32)
+    iters = np.zeros_like(x0, dtype=np.int32)
+    done = np.zeros_like(x0, dtype=np.int32)
 
     mf = cl.mem_flags
     seed_list_d = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=seed_list)
@@ -184,30 +187,41 @@ def render_seeds(ctx, cq, prog, seeds):
     x_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=x)
     y_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=y)
     buff_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=buff)
+    iters_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=iters)
     done_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=done)
 
     mandel_trace = prog.mandel_trace
-    while True:
-        unfinished = [i for i in range(len(seeds))
-                      if done[i] == 0]
-        if not(unfinished):
-            break
+    for max_iters in iter_checkpoints:
+        while True:
+            unfinished = [i for i in range(len(seeds))
+                          if done[i] == 0]
+            if not(unfinished):
+                break
 
-        n = min(nbufs, len(unfinished))
-        for buff_id in range(n):
-            seed_list[buff_id] = unfinished[buff_id]
-        cl.enqueue_copy(cq, seed_list_d, seed_list)
+            n = min(nbufs, len(unfinished))
+            for buff_id in range(n):
+                seed_list[buff_id] = unfinished[buff_id]
+            cl.enqueue_copy(cq, seed_list_d, seed_list)
 
-        mandel_trace(cq, (n,), None,
-                     seed_list_d, x0_d, y0_d, x_d, y_d, buff_d, done_d)
-        cq.finish()
+            mandel_trace(cq, (n,), None,
+                         np.int32(max_iters),
+                         seed_list_d, x0_d, y0_d, x_d, y_d,
+                         buff_d, iters_d, done_d)
+            cq.finish()
 
-        cl.enqueue_copy(cq, done, done_d)
+            cl.enqueue_copy(cq, done, done_d)
 
-    cl.enqueue_copy(cq, buff, buff_d)
+        cl.enqueue_copy(cq, buff, buff_d)
 
-    counts = np.sum(buff, axis=0, dtype=np.int32)
-    return counts
+        counts = np.sum(buff, axis=0, dtype=np.int32)
+        yield counts
+
+        done *= 0
+        cl.enqueue_copy(cq, done_d, done)
+
+def render_seeds(ctx, cq, prog, seeds):
+    for counts in render_seeds_gen(ctx, cq, prog, seeds, [-1]):
+        return counts
 
 def compute():
     # compute input arrays of point coords
@@ -266,6 +280,36 @@ def render(seeds, img_name):
     img.save(img_name)
     print(f'saved image "{img_name}"')
 
+def animate(seeds, img_prefix):
+    ctx, cq, prog = cl_init()
+    palette = flame_palette()
+
+    step = MIN_ITERS_SAMPLES // ANIMATE_FRAMES
+    iter_checkpoints = list(range(step, MIN_ITERS_SAMPLES+step, step))
+
+    for i, counts in enumerate(render_seeds_gen(ctx, cq, prog,
+                                                seeds, iter_checkpoints),
+                               start=1):
+
+        scaled = np.uint16(np.sqrt(counts / np.max(counts)) * (len(palette) - 1))
+        image = palette[scaled]
+
+        img = PIL.Image.fromarray(image, 'RGB')
+        img = img.transpose(PIL.Image.Transpose.ROTATE_270)
+        img_name = f'{img_prefix}-{i:05}.png'
+        img.save(img_name)
+        print(f'saved image "{img_name}"')
+
+def do_load_seeds(fnames):
+    seeds = []
+    for fname in fnames:
+        seeds.extend(load_seeds(fname))
+    if not seeds:
+        print('error: no input')
+        sys.exit(1)
+    print('seed count:', len(seeds))
+    return seeds
+
 def do_render(args):
     if args.output is None:
         if len(args.seeds) == 1:
@@ -278,25 +322,33 @@ def do_render(args):
         if args.output is None:
             args.output = f'bbrot-{int(time.time())}.png'
 
-    seeds = []
-    for fname in args.seeds:
-        seeds.extend(load_seeds(fname))
-    if not seeds:
-        print('error: no input')
-        sys.exit(1)
-    print('seed count:', len(seeds))
+    seeds = do_load_seeds(args.seeds)
     render(seeds, args.output)
+
+def do_animate(args):
+    seeds = do_load_seeds(args.seeds)
+    animate(seeds, args.prefix)
 
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='subcommand')
+
     cmd_compute = subparsers.add_parser('compute')
+
     cmd_render = subparsers.add_parser('render')
     cmd_render.add_argument('--output', '-o',
                             help='name of image output file')
     cmd_render.add_argument('seeds',
                             help='name of seed input file(s)',
                             nargs='+')
+
+    cmd_animate = subparsers.add_parser('animate')
+    cmd_animate.add_argument('--prefix', '-p',
+                             help='prefix of image output files',
+                             required=True)
+    cmd_animate.add_argument('seeds',
+                             help='name of seed input file(s)',
+                             nargs='+')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -310,9 +362,8 @@ def main():
     elif args.subcommand == 'render':
         do_render(args)
 
-    else:
-        print(f'error: invalid command: "{cmd}"')
-        sys.exit(1)
+    elif args.subcommand == 'animate':
+        do_animate(args)
 
 if __name__ == '__main__':
     main()

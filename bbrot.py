@@ -28,7 +28,8 @@ MAX_ITERS_SAMPLES = 5*10**6
 MAX_RENDER_BUF_MEM = 2*1024**3
 MAX_RENDER_BUFS = MAX_RENDER_BUF_MEM // (4 * STEPS * STEPS)
 
-ANIMATE_FRAMES = 25*5
+ANIMATE_FPS = 25
+ANIMATE_SECONDS = 10
 
 CL_HEADER_FILE_NAME = 'bbrot-generated.h'
 
@@ -284,21 +285,32 @@ def animate(seeds, img_prefix):
     ctx, cq, prog = cl_init()
     palette = flame_palette()
 
-    step = MIN_ITERS_SAMPLES // ANIMATE_FRAMES
-    iter_checkpoints = list(range(step, MIN_ITERS_SAMPLES+step, step))
+    tot_frames = ANIMATE_SECONDS * ANIMATE_FPS
+    max_iters = MIN_ITERS_SAMPLES
+    step = max_iters // tot_frames
+    iter_checkpoints = list(range(step, max_iters+step, step))
+    prev = None
 
     for i, counts in enumerate(render_seeds_gen(ctx, cq, prog,
                                                 seeds, iter_checkpoints),
                                start=1):
+        if prev is None:
+            prev = np.zeros_like(counts)
+        diff = counts - prev
+        prev = counts
 
-        scaled = np.uint16(np.sqrt(counts / np.max(counts)) * (len(palette) - 1))
+        # combine total counts with difference to last counts
+        # for more visually "active" images
+        maxi = np.maximum(counts / max(1, np.max(counts)),
+                          diff / max(1, np.max(diff)))
+        scaled = np.uint16(np.sqrt(maxi) * (len(palette) - 1))
         image = palette[scaled]
 
         img = PIL.Image.fromarray(image, 'RGB')
         img = img.transpose(PIL.Image.Transpose.ROTATE_270)
         img_name = f'{img_prefix}-{i:05}.png'
         img.save(img_name)
-        print(f'saved image "{img_name}"')
+        print(f'saved image "{img_name}" - {i} / {len(iter_checkpoints)}')
 
 def do_load_seeds(fnames):
     seeds = []
